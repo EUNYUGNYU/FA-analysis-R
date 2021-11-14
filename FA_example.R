@@ -1,0 +1,120 @@
+# 0. 요인분석 패키지
+library(tidyverse)
+library(psych)
+library(corrplot)
+
+# 1. 자료 읽기
+DF<-read.csv('QUSTNAIR.csv')
+dim(DF)
+
+
+# 2.자료 정리
+
+# 변수명 변경
+DF<-rename(DF,
+           '치수안맞음'=Q01, '컵작음'=Q02, '컵조임'=Q03,'겨드랑이조임'=Q04,
+           '원단신축성없음'=Q05, '거친촉감'=Q06, '땀흡수안됨'=Q07, '답답함'=Q08,
+           '앞중심들뜸'=Q09,'위로올라감'=Q10,'어깨끈흘러내림'=Q11, '뒤여밈불편'=Q12, 
+           '앞여밈불편'=Q13,'가슴못받침'=Q14, '가슴못모음'=Q15, '가슴못고정'=Q16,
+           '디자인안세련'=Q17, '디자인안다양'=Q18)
+head(DF)
+
+# 결측값 제거
+X<-na.omit(DF)
+dim(X) # 결측치 제거 후 데이터 101개, 변수는 18개 이다.
+head(X,10)
+
+
+# 3. 자료 탐색 / 요인분석 적절성
+
+# 상관행렬 시각화
+R<-cor(X)
+corrplot.mixed(R, upper='ellipse')
+
+# KMO
+KMO(R) 
+# => overall MSA가 0.7이고 각 변수별 MSA가 0.5 이하인 것이 없다. 따라서 요인분석 진행이 가능하다.
+
+# Bartlett 구형성검정
+cortest.bartlett(R, n=nrow(X))
+# p-value가 0.05 이하이므로 Reject H0 (H0 : 변수들끼리 전혀 관계가 없다.) 한다. 따라서 요인분석 진행 가능하다.
+
+
+# 4. 주성분 요인분석 1
+
+# screeplot 으로 적절한 요인 수 결정하기
+scree(R, hline=1)
+# => 다소 애매하지만 주성분 개수는 5개로 지정함
+
+# 회전없이 주성분 요인분석
+Mfapc<-principal(X, nfactors = 5, rotate='none')
+print(Mfapc, digit=4)
+# => 요인 5개로는 전체 분산의 58.8% 설명 가능하다. 50% 이상 설명 가능하므로 요인 개수는 5개로 한다.
+
+# 공통성, 특수성
+data.frame('공통성'=Mfapc$communality, '특수성'= Mfapc$uniquenesses)
+# => 공통성이 0.5 이상 경우에만 바람직한 변수이다. 따라서 컵조임, 겨드랑이조임, 땀흡수안됨, 압중심들뜸, 위로올라감, 어깨끈흘러내림은 바람직한 변수가 아닌 것으로 확인된다.
+
+# 초기고유값, 비율분산, 누적분석
+data.frame('초기고유값'= Mfapc$values,
+           '비율분산'=Mfapc$values/ sum(Mfapc$values)*100,
+           '누적분산'= cumsum(Mfapc$values/ sum(Mfapc$values)*100))
+
+# 회전 전 요인행렬
+fa.sort(Mfapc$loadings)
+
+# 요인1: 모든 문항의 적재량이 0.3 이상. 전반적인 만족도
+# 요인2: {답답함, 컵조임, 디자인안다양, 디자인안세련, 컵작음} - {가슴못받침, 가슴못고정, 위로올라감, 가슴못모음, 어깨끈흘러내림}
+# 요인3: {가슴못받침, 가슴못고정, 치수안맞음, 가슴못모음, 컵작음}- {답답함, 위로올라감, 어깨끈흘러내림}
+# 요인4: {디자인안다양, 디자인안세련}-{거친촉감, 땀흡수안됨, 원단신축성없음}
+# 요인5: {앞여밈불편, 치수안맞음, 컵작음}-{거친촉감}
+# => 요인별 분류 및 해석이 어렵고 겹치는 변수도 있음
+
+# diagram
+fa.diagram(Mfapc, simple = FALSE, cut=0.3, digits = 2)
+
+
+# 5. 주성분 요인분석 2
+
+# Varimax 회전해서 주성분 요인분석
+Mfapcvmx<-principal(X, nfactors = 5, rotate='varimax')
+print(Mfapcvmx, digit=4)
+# => 요인 5개로는 전체 분산의 58.8% 설명 가능하다. 50% 이상 설명 가능하므로 요인 개수는 5개로 한다.
+
+# 공통성, 특수성
+data.frame('공통성'=Mfapcvmx$communality, '특수성'= Mfapcvmx$uniquenesses)
+# => 공통성, 특수성은 회전 전과 같다.
+
+# 회전 후 요인행렬
+
+# cut =0.3
+print(fa.sort(Mfapcvmx), cut=0.43, digit=4) #요인별로 겹치는 문항이 생긴다.
+# cut=0.43으로 조정
+print(fa.sort(Mfapcvmx), cut=0.43, digit=4)
+# 요인별로 겹치는 문항이 없는 것으로 확인된다.
+
+# 요인1: 옷이 체형에 맞지 않음 (뒤여밈불편, 어깨끈흘러내림, 앞여밈불편, 위로올라감, 앞중심들뜸, 겨드랑이 조임)
+# 요인2: 디자인 관련 불편 (디자인안세련, 디자인안다양)
+# 요인3: 가슴부위 관련 불편 (가슴못모음, 가슴못받침, 가슴못고정)
+# 요인4: 옷의 질 관련 불편 (거친촉감, 원단신축성없음, 답답함, 땀흡수안됨)
+# 요인5: 컵 및 치수 안맞음 관련 불편 (컵작음, 치수안맞음, 컵조임)
+
+# diagram
+fa.diagram(Mfapcvmx, simple = FALSE, cut=0.43, digits = 2)
+# 앞에서 cut을 0.43으로 지정해서 겹치는 요인이 없다.
+
+# biplot
+par(mfrow=c(1,2))
+biplot(Mfapcvmx$loadings[,c(1,2)], Mfapcvmx$loadings[,c(1,2)])
+biplot(Mfapcvmx$loadings[,c(1,3)], Mfapcvmx$loadings[,c(1,3)])
+biplot(Mfapcvmx$loadings[,c(1,4)], Mfapcvmx$loadings[,c(1,4)])
+biplot(Mfapcvmx$loadings[,c(1,5)], Mfapcvmx$loadings[,c(1,5)])
+biplot(Mfapcvmx$loadings[,c(2,3)], Mfapcvmx$loadings[,c(2,3)])
+biplot(Mfapcvmx$loadings[,c(2,4)], Mfapcvmx$loadings[,c(2,4)])
+biplot(Mfapcvmx$loadings[,c(2,5)], Mfapcvmx$loadings[,c(2,5)])
+biplot(Mfapcvmx$loadings[,c(3,4)], Mfapcvmx$loadings[,c(3,4)])
+biplot(Mfapcvmx$loadings[,c(3,5)], Mfapcvmx$loadings[,c(3,5)])
+biplot(Mfapcvmx$loadings[,c(4,5)], Mfapcvmx$loadings[,c(4,5)])
+par(mfrow=c(1,1))
+# => 전반적으로 축이 붙어서 한쪽으로 몰린 상태 (90도와 유사)한 상태이다. 따라서 회전은 적절하다 할 수 있다.
+
